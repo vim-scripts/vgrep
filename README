@@ -1,0 +1,22 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=773
+
+vgrep.vim is working for some people have complex project with deep directory 
+
+The vgrep.vim plugin script is work another grep unlike unix grep which use different output for look, if you didn't have such grep download at http://www.interlog.com/~tcharron/grep.html and patch with grep20f.dif 
+
+wide format via unix format  
+ ============ Wide Output Format =================
+ File: C:\vim\vim62\plugin\vgrep.vim             
+     1: File: vgrep.vim                          
+    17: let loaded_vgrep = 1                     
+ File: C:\vim\vim62\plugin\testtttt1\testtttt2\testtttt3\whereis.vim           
+     1: File: whereis.vim                        
+ =================================================
+ save you eye see real code 
+ ============ Unix Output ========================
+ plugin\vgrep.vim:1: file...
+ plugin\vgrep.vim:17: let...
+ plugin\testtttt1\testtttt2\testtttt2\whereis.vim:1: file ...
+ =================================================
+
+
