@@ -1,6 +1,6 @@
 " File: vgrep.vim
 " Author: Lechee.Lai 
-" Version: 1.1
+" Version: 1.2
 " 
 " Goal:
 "   Easy look for complex directory search without long filename fill 
@@ -8,7 +8,7 @@
 " 
 " Another grep output in wide format like semware grep / oakgrep / TurboGrep
 " and GNU grep 2.0d with patch http://www.interlog.com/~tcharron/grep.html
-" it also work for Win32 only I think it's easy port from current GNU grep
+" it also ork for Win32 only I think it's easy port from current GNU grep
 "
 " ============ Wide Output Format =================
 " File: C:\vim\vim62\plugin\vgrep.vim             
@@ -22,7 +22,8 @@
 " 
 " ============ Unix Output ========================
 " plugin\vgrep.vim:1: file...
-" plugin\testtttt1\testtttt2\testtttt2\whereis.vim:1: file ...
+" plugin\vgrep.vim:17: let....
+" plugin\testtttt1\testtttt2\testtttt3\whereis.vim:1: file ...
 " =================================================
 " 
 " Change Vgrep_Path locate for grep.exe
@@ -30,13 +31,21 @@
 " Make sure your are using semware grep or GNU grep 2.0f
 " only this two grep are support now default in GNU grep 2.0f
 "
-" "=== S e t   Y o u r  G r e p   F i r s t  ==="
 "
 "
-" Command :Vgrep for grep under cursor
-"         :Vlist for lister and select by ENTER
+" Command: :Vgrep for grep under cursor
+"          :Vlist for lister and select by ENTER
 "
-" History
+" Operator:
+"          <Enter>		EditFile
+"          o	   		EditFile
+"          <2LeftMouse>	EditFile
+"          <Esc>		Quit/Close
+" Require:
+"		+viminfo feature must enable
+"         
+"
+" History:
 "    1.0 Initial Revision
 "        Only GnuGrep 2.0f and semware Support
 "
@@ -45,20 +54,30 @@
 "        Add OakGrep 5.1+ Support
 "        Add Error handle for unknow format prevent 100% CPU Usage
 "        Add grp.vim for syntax color
-"    
-
+"    1.2 
+"        Add LeftMouse Double Click / o for Open
+"        Add search_dirs memory last location
+"        Add file_mask memory last use
+"        Bugfix Error Handle
+"        Default is regexp enable
+"        
+"
 
 if exists("loaded_vgrep") || &cp
     finish
 endif
 let loaded_vgrep = 1
 
+" "=== S e l e c t   Y o u r  G r e p   F i r s t  ==="
 " ======= "? Which grep you have ?" ======= 
 let TurboGrep = 0
-let semwareGrep = 0   
-let GnuGrep = 1
+let semwareGrep = 1
+let GnuGrep = 0
 let OakGrep = 0
-" =======================================
+" =========================================
+
+" ====== Enable your grep as "regexp" enable ======
+let regexp = 1
 
 if TurboGrep == 1 
     let semwareGrep = 0     
@@ -93,12 +112,20 @@ endif
 
 " you can use "CTRL-V" for mapping real key in Quote
 if !exists("Vlist_Key")
-    let Vlist_Key = 'Îo' " Alt-F8
+	if has("gui_running")
+		let Vlist_Key = '<M-F8>'
+	else	
+		let Vlist_Key = 'Îo' " Alt-F8
+	endif
 endif
 
 " you can use "CTRL-V" for mapping real key in Quote
 if !exists("Vgrep_Key")
-    let Vgrep_Key = '§'   " Alt-'
+	if has("gui_running")
+		let Vgrep_Key = '§'
+	else	
+		let Vgrep_Key = '§'   " Alt-'
+	endif
 endif
 
 let g:Vgrep_Shell_Quote_Char = '"'
@@ -109,17 +136,28 @@ let g:Vgrep_Shell_Quote_Char = '"'
 
 " semware grep 2.0
 if semwareGrep == 1
-    let g:Vgrep_Default_Options = '-isn'
+	let g:Vgrep_Default_Options = '-isn'
+        
+	if regexp == 1
+		let g:Vgrep_Default_Options = g:Vgrep_Default_Options . 'x'
+	endif
 endif
 
 " GNU grep 2.0f option z for wide output
 if GnuGrep == 1
-    let g:Vgrep_Default_Options = '-iSzn'
+    	let g:Vgrep_Default_Options = '-iSzn'
+    	if regexp == 1
+    		let g:Vgrep_Default_Options = g:Vgrep_Default_Options . 'E'
+	endif
 endif
 
-" Turbo Grep 5.5 from Borloand C++ 5.5 free compiled kit
+" Turbo Grep 5.5 from Borloand C++ 5.5 free compiler kit
 if TurboGrep == 1
-    let g:Vgrep_Default_Options = '-idn'
+    if regexp == 1
+    	let g:Vgrep_Default_Options = '-idn'
+    else
+    	let g:Vgrep_Default_Options = '-idnr'
+    endif
 endif
 
 if OakGrep == 1
@@ -128,21 +166,21 @@ endif
 
 "============================================================
 
-if !exists("Vgrep_Default_Filelist")
+if !exists("VGREP_MASK")
      if $bmask == ""   
-         let g:Vgrep_Default_Filelist = '*'   
+         let g:VGREP_MASK = '*'   
      else 
-	 let g:Vgrep_Default_Filelist = $bmask
+	     let g:VGREP_MASK = $bmask
      endif
 endif	
 	
 let Vgrep_Output = 'c:\fte.grp'
 
-if !exists("Vgrep_dirs")
+if !exists("VGREP_DIRS")
     if $bhome == ""    
-       let g:Vgrep_dirs=getcwd()
+       let g:VGREP_DIRS=getcwd()
     else
-       let g:Vgrep_dirs=$bhome     
+       let g:VGREP_DIRS=$bhome     
     endif
 endif
 
@@ -200,10 +238,11 @@ endfunction
 "
 function! s:EditFile()
     let Done = 0    
-
+	let chkerror = 0
     " memory the last location 
     exe 'normal ' . 'mZ'    
-                         
+
+	" =============== Semware Grep / GNU Grep ===================== 
     if g:GnuGrep == 1 || g:semwareGrep == 1
     
         let chkline = getline('.')
@@ -234,6 +273,7 @@ function! s:EditFile()
         endif   
     endif
     
+	" ================ Turbo Grep ================================
     if g:TurboGrep == 1
         let chkline = getline('.')
 		let foundln = stridx(chkline, ' ')
@@ -243,7 +283,7 @@ function! s:EditFile()
 			let flen = strlen(fname)
 			let fname = strpart(fname, 0, flen-1)
 			if fname[1] != ':'
-				let fname = g:Vgrep_dirs . '\' . fname
+				let fname = g:VGREP_DIRS . '\' . fname
 			endif
 	     	let fline = ""
 		else
@@ -259,7 +299,7 @@ function! s:EditFile()
 					let flen = strlen(fname)
 					let fname = strpart(fname, 0, flen-1)
 					if fname[1] != ':'
-						let fname = g:Vgrep_dirs . '\' . fname
+						let fname = g:VGREP_DIRS . '\' . fname
 					endif
 					let Done = 1
 				endif
@@ -274,6 +314,7 @@ function! s:EditFile()
 
     endif
 
+	" ============ OakGrep ======================================
 	if g:OakGrep == 1
 		let chkerror = 0
         let chkline = getline('.')
@@ -288,7 +329,7 @@ function! s:EditFile()
     		if chk == "----------"
             	let fname = strpart(chkline, 11)
     			if fname[1] != ':'
-    				let fname = g:Vgrep_dirs . '\' . fname
+    				let fname = g:VGREP_DIRS . '\' . fname
     			endif
     	     	let fline = ""
     		else
@@ -307,7 +348,7 @@ function! s:EditFile()
         			if chk == "----------"
         				let fname = strpart(chkline, 11)
         				if fname[1] != ':'
-        					let fname = g:Vgrep_dirs . '\' . fname
+        					let fname = g:VGREP_DIRS . '\' . fname
         				endif
         				let Done = 1
         			endif
@@ -331,10 +372,21 @@ function! s:EditFile()
  	else	
     	" Make suit for you
     	" silent! bdelete
-    	exe 'edit ' . fname
-    	if strlen(fline)
-      		exe 'normal ' . fline . 'gg'
-    	endif  
+		echo fline
+		let fline = substitute(fline, '\s*', '', "")
+
+		if fline > 0  || fline == ""
+    		if filereadable(fname) 
+        		exe 'edit ' . fname
+        		if strlen(fline)
+          			exe 'normal ' . fline . 'gg'
+        		endif  
+    		else
+    			echo "Invaild filename"
+    		endif
+		else 
+		  echo "Line Error"	
+		endif
 	endif
 endfunction	
 
@@ -354,21 +406,21 @@ function! s:RunVgrep(...)
     endif
     let pattern = g:Vgrep_Shell_Quote_Char . pattern . g:Vgrep_Shell_Quote_Char
 
-    let filenames = input("Grep in files: ", g:Vgrep_Default_Filelist)
+    let filenames = input("Grep in files: ", g:VGREP_MASK)
     if filenames == ""
 	echo "Cancelled."    
         return
     endif
-
+    let g:VGREP_MASK = filenames
     let cmd = vgrep_path . " " . vgrep_opt . " "
     let cmd = cmd . " " . pattern
     let cmd = cmd . " " . filenames
-    let vgrepdir = input("vgrep dir: ", g:Vgrep_dirs)
+    let vgrepdir = input("vgrep dir: ", g:VGREP_DIRS)
     if vgrepdir == ""
 	    echo "Cancelled."    
 	    return
     endif 
-	let g:Vgrep_dirs = vgrepdir
+	let g:VGREP_DIRS = vgrepdir
 
     let last_cd = getcwd()
     exe 'cd ' . vgrepdir
@@ -383,12 +435,18 @@ function! s:RunVgrep(...)
     endif       
 
     nnoremap <buffer> <silent> <CR> :call <SID>EditFile()<CR>
+    nmap <buffer> <silent> <2-LeftMouse> :call <SID>EditFile()<CR>
+    nmap <buffer> <silent> o :call <SID>EditFile()<CR>
+	nmap <buffer> <silent> <ESC> :bdelete<CR>
 endfunction
 
 function! s:RunVlist()
     setlocal modifiable
     exe 'edit ' . g:Vgrep_Output
     nnoremap <buffer> <silent> <CR> :call <SID>EditFile()<CR>
+    nmap <buffer> <silent> <2-LeftMouse> :call <SID>EditFile()<CR>
+    nmap <buffer> <silent> o :call <SID>EditFile()<CR>
+	nmap <buffer> <silent> <ESC> :bdelete<CR>
     setlocal nomodifiable
 endfunction
 
