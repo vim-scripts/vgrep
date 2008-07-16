@@ -1,6 +1,6 @@
 " File: vgrep.vim
 " Author: Lechee.Lai 
-" Version: 1.3
+" Version: 1.4
 " 
 " Goal:
 "   Easy look for complex directory search without long filename fill 
@@ -61,8 +61,12 @@
 "        Bugfix Error Handle
 "        Default is regexp enable
 "    1.3 
-"	 Add unix grep support    
+"	     Add unix grep support    
 "        Add g2w.pl for wide convertion
+"    1.4 
+"	     Add native vgrep support
+"        same as g2w.pl but in c code
+"
 
 if exists("loaded_vgrep") || &cp
     finish
@@ -75,7 +79,8 @@ let TurboGrep = 0
 let semwareGrep = 0
 let GnuGrep = 0
 let OakGrep = 0
-let UnixGrep = 1
+let UnixGrep = 0
+let vgrep = 1
 " =========================================
 
 " ====== Enable your grep as "regexp" enable ======
@@ -96,7 +101,7 @@ elseif GnuGrep == 1
 elseif OakGrep == 1
 	let semwareGrep = 0
 	let GnuGrep = 0
-	let	TurboGrep = 0
+	let TurboGrep = 0
 endif
 
 " Location of the grep utility
@@ -110,19 +115,22 @@ if !exists("Vgrep_Path")
   elseif OakGrep == 1
 	let Vgrep_Path = 'c:\usr32\grep32.exe'  
   elseif UnixGrep == 1
-	let Vgrep_Path = '/usr/bin/grep'      
+	let Vgrep_Path = 'grep'      
+  elseif vgrep == 1
+  	let Vgrep_Path = 'vgrep'
   endif  
+  
 endif
 
 " Location of perl unix grep2wide convert 
-  let g2w = '/usr/local/g2w.pl'
+  let g2w = '/usr/local/bin/g2w.pl'
 
 " you can use "CTRL-V" for mapping real key in Quote
 if !exists("Vlist_Key")
 	if has("gui_running")
-		let Vlist_Key = '<M-O>'
+		let Vlist_Key = "<M-'>"
 	else	
-		let Vlist_Key = 'o' " Alt-o
+		let Vlist_Key = "[23~" 
 	endif
 endif
 
@@ -175,19 +183,24 @@ if UnixGrep == 1
 	let g:Vgrep_Default_Options = '-irn'
 endif 
 
+if vgrep == 1
+	let g:Vgrep_Default_Options = 'i'
+endif
+
 "============================================================
 
 if !exists("VGREP_MASK")
      if $bmask == ""   
-         let g:VGREP_MASK = '*'   
+         let g:VGREP_MASK = '*'
      else 
 	     let g:VGREP_MASK = $bmask
      endif
 endif	
 	
 let Vgrep_Output = 'c:\fte.grp'
-if UnixGrep == 1
+if (UnixGrep == 1 || vgrep ==1 )
 	let Vgrep_Output = $HOME . '/fte.grp'
+    let Vgrep_Output1 = $HOME . '/fte.g__'
 endif
 
 if !exists("VGREP_DIRS")
@@ -217,15 +230,18 @@ exe "inoremap <unique> <silent> " . Vlist_Key . " <C-O>:call <SID>RunVlist()<CR>
 "
 function! s:RunVgrepClrDat()
     let tmpfile = g:Vgrep_Output
+    let tmpfile1 = g:Vgrep_Output1
     if filereadable(tmpfile)
-      let del_str = 'del ' . tmpfile
-      if g:UnixGrep == 1
-	let del_str = 'rm -f ' . tmpfile 
-      endif  
-      let cmd_del = system(del_str)
-      exe "redir! > " . g:Vgrep_Null_Device
-      silent echon cmd_del
-    redir END
+        let del_str = 'del ' . tmpfile
+        if (g:UnixGrep == 1 || g:vgrep == 1)
+            let del_str = 'rm -f ' . tmpfile 
+        endif  
+"        let cmd_del = system(del_str)
+"        exe "redir! > " . g:Vgrep_Null_Device
+"        silent echon cmd_del
+"        redir END
+	call delete(tmpfile1)
+        call delete(tmpfile)
     endif
 
     
@@ -243,17 +259,19 @@ endfunction
 " Run the specified grep command using the supplied pattern
 function! s:RunVgrepCmd(cmd, pattern)
 
-    let tmpfile = g:Vgrep_Output
     let cmd_output = system(a:cmd)
-    
     if cmd_output == ""
         echohl WarningMsg | 
         \ echomsg "Error: Pattern " . a:pattern . " not found" | 
         \ echohl None
         return
     endif
+    let tmpfile = g:Vgrep_Output
+    let old_verbose = &verbose
+    set verbose&vim
 
     exe "redir! > " . tmpfile
+"    silent echon '[Search results for pattern: ' . a:pattern . "]\n"    
     silent echon cmd_output
     redir END
 
@@ -268,7 +286,7 @@ function! s:EditFile()
     exe 'normal ' . 'mZ'    
 
 	" =============== Semware Grep / GNU Grep / Unix Grep =========== 
-    if g:GnuGrep == 1 || g:semwareGrep == 1 || g:UnixGrep == 1
+    if g:GnuGrep == 1 || g:semwareGrep == 1 || g:UnixGrep == 1 || g:vgrep == 1
     
         let chkline = getline('.')
         let foundln = stridx(chkline,':')
@@ -431,11 +449,25 @@ function! s:RunVgrep(...)
     endif
     let pattern = g:Vgrep_Shell_Quote_Char . pattern . g:Vgrep_Shell_Quote_Char
 
+    if g:VGREP_MASK == "*"
+        let ff = expand("%:e")
+        if ff != ""
+            let g:VGREP_MASK = "*.".ff
+        endif
+    endif
+
     let filenames = input("Grep in files: ", g:VGREP_MASK)
     if filenames == ""
-	echo "Cancelled."    
+        echo "Cancelled."    
         return
     endif
+    if filenames == "*"
+        let ff =expand("%:e")
+        if ff != ""
+            let filenames = "*.".ff
+        endif
+    endif
+
     let g:VGREP_MASK = filenames
     let vgrepdir = input("vgrep dir: ", g:VGREP_DIRS)
     if vgrepdir == ""
@@ -446,17 +478,22 @@ function! s:RunVgrep(...)
  
 
     if g:UnixGrep == 1
-	let cmd = vgrep_path . " " . "--include=" . filenames . " " . vgrep_opt . " " . pattern . " " . g:VGREP_DIRS
-    else  
-        let cmd = vgrep_path . " " . vgrep_opt . " "
-        let cmd = cmd . " " . pattern
-        let cmd = cmd . " " . filenames
+	let cmd = vgrep_path . " " . "--include=\\" . filenames . " " . vgrep_opt . " " . pattern . " " . g:VGREP_DIRS
+    else
+ 
+    	if g:vgrep == 1
+                let cmd = vgrep_path . " " . pattern . " \\" . filenames . " " . vgrep_opt
+        else 
+        	let cmd = vgrep_path . " " . vgrep_opt . " "
+        	let cmd = cmd . " " . pattern
+        	let cmd = cmd . " \\" . filenames
+        endif
     endif
-
-    if g:UnixGrep == 1
+   if g:UnixGrep == 1 
     	call s:RunVgrepClrDat()
+        echo cmd
     	call s:RunVgrepCmd(cmd, pattern)
-	call s:RunVgrepWidePatch()
+	    call s:RunVgrepWidePatch()
     else 
     	let last_cd = getcwd()
     	exe 'cd ' . vgrepdir
@@ -464,7 +501,6 @@ function! s:RunVgrep(...)
     	call s:RunVgrepCmd(cmd, pattern)
     	exe 'cd ' . last_cd
     endif
-
     if filereadable(g:Vgrep_Output)
        setlocal modifiable 
        exe 'edit ' . g:Vgrep_Output
